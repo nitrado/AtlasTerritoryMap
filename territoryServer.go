@@ -31,6 +31,11 @@ import (
 	"github.com/llgcode/draw2d/draw2dimg"
 )
 
+const (
+	MarkerLand  uint8 = 0
+	MarkerWater uint8 = 1
+)
+
 // Marker represents a territory flag roughly as stored in redis
 type Marker struct {
 	serverX        int // from redis key which is serverId
@@ -102,6 +107,7 @@ type RedisConfiguration struct {
 type Configuration struct {
 	EnableTileGeneration bool                 // Turn on/off generation for web page
 	EnableGameGeneration bool                 // Turn on/off generation for game
+	EnableTopTribes      bool                 // Turn on/off generation of top 10 tribe generation
 	Host                 string               // Host adapter for http listen
 	Port                 uint16               // Port for http listen
 	AlternativeURL       string               // Alternative URL (e.g. S3) for game and web viewer
@@ -136,46 +142,46 @@ func (c *Configuration) getDatabaseByName(name string) RedisConfiguration {
 
 var config Configuration
 var colors = [...]string{
-	//"red",
-	//"green",
+	"red",
+	"green",
 	"yellow",
 	"blue",
-	//"orange",
+	"orange",
 	"purple",
-	//"cyan",
-	//"magenta",
-	//"lime",
-	//"pink",
-	//"teal",
-	//"lavender",
-	//"brown",
-	//"beige",
-	//"maroon",
-	//"olive",
+	"cyan",
+	"magenta",
+	"lime",
+	"pink",
+	"teal",
+	"lavender",
+	"brown",
+	"beige",
+	"maroon",
+	"olive",
 	"coral",
-	//"navy",
+	"navy",
 }
 var colorValues = map[string]color.NRGBA{
-	"black": color.NRGBA{0x00, 0x00, 0x00, 0xff},
-	"gray":  color.NRGBA{0xa9, 0xa9, 0xa9, 0xff},
-	//"red":      color.NRGBA{0xff, 0x00, 0x00, 0xff},
-	//"green":    color.NRGBA{0x00, 0x80, 0x00, 0xff},
-	"yellow": color.NRGBA{0xff, 0xff, 0x00, 0xff},
-	"blue":   color.NRGBA{0x00, 0x00, 0xff, 0xff},
-	//"orange": color.NRGBA{0xff, 0xa5, 0x00, 0xff},
-	"purple": color.NRGBA{0x80, 0x00, 0x80, 0xff},
-	//"cyan":   color.NRGBA{0x00, 0xff, 0xff, 0xff},
-	// "magenta":  color.NRGBA{0xff, 0x00, 0xff, 0xff},
-	// "lime":     color.NRGBA{0x00, 0xff, 0x00, 0xff},
-	// "pink":     color.NRGBA{0xff, 0xc0, 0xcb, 0xff},
-	//"teal":     color.NRGBA{0x00, 0x80, 0x80, 0xff},
-	// "lavender": color.NRGBA{0xe6, 0xe6, 0xfa, 0xff},
-	// "brown":    color.NRGBA{0xa5, 0x2a, 0x2a, 0xff},
-	// "beige":    color.NRGBA{0xf5, 0xf5, 0xdc, 0xff},
-	// "maroon":   color.NRGBA{0x80, 0x00, 0x00, 0xff},
-	// "olive":    color.NRGBA{0x80, 0x80, 0x00, 0xff},
-	"coral": color.NRGBA{0xff, 0x7f, 0x50, 0xff},
-	// "navy":     color.NRGBA{0x00, 0x00, 0x80, 0xff},
+	"black":    color.NRGBA{0x00, 0x00, 0x00, 0xff},
+	"grey":     color.NRGBA{0xa9, 0xa9, 0xa9, 0xff},
+	"red":      color.NRGBA{0xff, 0x00, 0x00, 0xff},
+	"green":    color.NRGBA{0x00, 0x80, 0x00, 0xff},
+	"yellow":   color.NRGBA{0xff, 0xff, 0x00, 0xff},
+	"blue":     color.NRGBA{0x00, 0x00, 0xff, 0xff},
+	"orange":   color.NRGBA{0xff, 0xa5, 0x00, 0xff},
+	"purple":   color.NRGBA{0x80, 0x00, 0x80, 0xff},
+	"cyan":     color.NRGBA{0x00, 0xff, 0xff, 0xff},
+	"magenta":  color.NRGBA{0xff, 0x00, 0xff, 0xff},
+	"lime":     color.NRGBA{0x00, 0xff, 0x00, 0xff},
+	"pink":     color.NRGBA{0xff, 0xc0, 0xcb, 0xff},
+	"teal":     color.NRGBA{0x00, 0x80, 0x80, 0xff},
+	"lavender": color.NRGBA{0xe6, 0xe6, 0xfa, 0xff},
+	"brown":    color.NRGBA{0xa5, 0x2a, 0x2a, 0xff},
+	"beige":    color.NRGBA{0xf5, 0xf5, 0xdc, 0xff},
+	"maroon":   color.NRGBA{0x80, 0x00, 0x00, 0xff},
+	"olive":    color.NRGBA{0x80, 0x80, 0x00, 0xff},
+	"coral":    color.NRGBA{0xff, 0x7f, 0x50, 0xff},
+	"navy":     color.NRGBA{0x00, 0x00, 0x80, 0xff},
 }
 
 func loadConfig(path string) (cfg Configuration, err error) {
@@ -192,6 +198,7 @@ func loadConfig(path string) (cfg Configuration, err error) {
 	cfg = Configuration{
 		EnableTileGeneration: false,
 		EnableGameGeneration: true,
+		EnableTopTribes:      false,
 		Host:                 "",
 		Port:                 8881,
 		AlternativeURL:       "",
@@ -390,9 +397,9 @@ func generateImage(opts *MapOptions, quadTree *quadtree.QuadTree) {
 		// radius in image coordinates
 		iRadius := 1.0
 		switch vb.marker.markerType {
-		case 0:
+		case MarkerLand:
 			iRadius = virtualLandRadius * virtualToActual
-		case 1:
+		case MarkerWater:
 			iRadius = virtualWaterRadius * virtualToActual
 		}
 		if iRadius < 1 {
@@ -431,61 +438,43 @@ type claimCircle struct {
 	id       int64
 }
 
-func generateCompressedFile(opts *MapOptions, quadTree *quadtree.QuadTree) {
+func generateCompressedFile(opts *MapOptions, markers []Marker) {
 	// Setup
-	var virtualPixelsPerServer float64
-	if config.ServersX >= config.ServersY {
-		virtualPixelsPerServer = float64(opts.virtualPixels / config.ServersX)
-	} else {
-		virtualPixelsPerServer = float64(opts.virtualPixels / config.ServersY)
-	}
-	//	virtualLandRadius := virtualPixelsPerServer * config.LandRadiusUE / config.GridSize
-	virtualWaterRadius := virtualPixelsPerServer * config.WaterRadiusUE / config.GridSize
-	virtualToActual := float64(opts.actualPixels) / float64(opts.virtualClip.Max.X-opts.virtualClip.Min.X+1)
+	const BitsPerPixel uint16 = 32
+	ChannelBlocksPerDimension := uint16(math.Floor(math.Sqrt(float64(BitsPerPixel))))
+	CorrectedGameSize := int(config.GameSize) * int(ChannelBlocksPerDimension)
+
+	var virtualPixelsPerServerX = float64(CorrectedGameSize / config.ServersX)
+	var virtualPixelsPerServerY = float64(CorrectedGameSize / config.ServersY)
 
 	//TODO: Cleanup and remote the whole per server option on this one
-	SrcPixels := uint16(opts.actualPixels)
+	SrcPixels := uint16(CorrectedGameSize)
 	IDMap := make(map[uint64]FlagOwnerOutputHeader)
 
 	//Draw territories
-	qtBB := quadtree.BoundingBox{
-		MinX: float64(opts.virtualClip.Min.X),
-		MaxX: float64(opts.virtualClip.Max.X),
-		MinY: float64(opts.virtualClip.Min.Y),
-		MaxY: float64(opts.virtualClip.Max.Y),
-	}
-	for _, iVB := range quadTree.Query(qtBB) {
-		vb := iVB.(VirtualBounds)
-
-		// marker adjusted for clip zone
-		tX := vb.x - float64(opts.virtualClip.Min.X)
-		tY := vb.y - float64(opts.virtualClip.Min.Y)
-
-		// filter points outside of clip + gutter
-		if tX < -virtualWaterRadius || tY < -virtualWaterRadius || tX >= float64(opts.virtualClip.Max.X)+virtualWaterRadius || tY >= float64(opts.virtualClip.Max.Y)+virtualWaterRadius {
-			continue
-		}
-
-		// marker in image coordinates
-		iX := tX * virtualToActual
-		iY := tY * virtualToActual
+	for _, marker := range markers {
+		// marker adjusted to world space
+		vServerOffsetX := float64(marker.serverX) * virtualPixelsPerServerX
+		vServerOffsetY := float64(marker.serverY) * virtualPixelsPerServerY
+		iX := (float64(marker.relX) * virtualPixelsPerServerX) + vServerOffsetX
+		iY := (float64(marker.relY) * virtualPixelsPerServerY) + vServerOffsetY
 
 		// render marker
-		Entry, ok := IDMap[vb.marker.tribeOrOwnerID]
+		Entry, ok := IDMap[marker.tribeOrOwnerID]
 		if !ok {
 			Entry = FlagOwnerOutputHeader{
-				TribeOrPlayerID: vb.marker.tribeOrOwnerID,
+				TribeOrPlayerID: marker.tribeOrOwnerID,
 			}
 		}
 
-		switch vb.marker.markerType {
-		case 0:
+		switch marker.markerType {
+		case MarkerLand:
 			Entry.LandClaims = append(Entry.LandClaims, ClaimFlagOutputEntry{X: uint16(iX), Y: uint16(iY)})
-		case 1:
+		case MarkerWater:
 			Entry.WaterClaims = append(Entry.WaterClaims, ClaimFlagOutputEntry{X: uint16(iX), Y: uint16(iY)})
 		}
 
-		IDMap[vb.marker.tribeOrOwnerID] = Entry
+		IDMap[marker.tribeOrOwnerID] = Entry
 	}
 
 	// save the a tmp file
@@ -594,34 +583,18 @@ func generateTiles(tilePath string, zoomLevel uint, markers []Marker, wg *sync.W
 }
 
 func generateGame(gamePath string, markers []Marker) {
-	var servers int
-	if config.ServersX >= config.ServersY {
-		servers = config.ServersX
-	} else {
-		servers = config.ServersY
-	}
-
 	// common image options
 	opts := MapOptions{}
-
-	const BitsPerPixel uint16 = 32
-	ChannelBlocksPerDimension := uint16(math.Floor(math.Sqrt(float64(BitsPerPixel))))
-	CorrectedGameSize := int(config.GameSize) * int(ChannelBlocksPerDimension)
-
-	opts.actualPixels = CorrectedGameSize
-	opts.virtualPixels = CorrectedGameSize * servers
-
-	qt := createQuadTree(&opts, markers)
+	opts.filename = path.Join(gamePath, "world.map")
 
 	// generate world map
-	opts.virtualClip = image.Rect(0, 0, opts.virtualPixels-1, opts.virtualPixels-1)
-	opts.filename = path.Join(gamePath, "world.map")
-	generateCompressedFile(&opts, qt)
+	generateCompressedFile(&opts, markers)
 }
 
-func fetchClaimMarkers(client *redis.Client) ([]Marker, uint32) {
+func fetchClaimMarkers(client *redis.Client, includeCounts bool) ([]Marker, uint32, map[uint64]*TribeCount) {
 	var crcs []uint32
 	var markers []Marker
+	countsPerTribe := make(map[uint64]*TribeCount)
 
 	for x := 0; x < config.ServersX; x++ {
 		for y := 0; y < config.ServersY; y++ {
@@ -639,6 +612,7 @@ func fetchClaimMarkers(client *redis.Client) ([]Marker, uint32) {
 				tid := binary.LittleEndian.Uint64(bytes[0:8])
 				tx := binary.LittleEndian.Uint16(bytes[8:10])
 				ty := binary.LittleEndian.Uint16(bytes[10:12])
+				markerType := bytes[12]
 
 				m := Marker{}
 				m.serverX = x
@@ -646,21 +620,34 @@ func fetchClaimMarkers(client *redis.Client) ([]Marker, uint32) {
 				m.tribeOrOwnerID = tid
 				m.relX = float64(tx) / float64(math.MaxUint16)
 				m.relY = float64(ty) / float64(math.MaxUint16)
-				m.markerType = bytes[12]
+				m.markerType = markerType
 
 				markers = append(markers, m)
+
+				if includeCounts && markerType == MarkerLand && isTribeID(tid) {
+					tribeCount := countsPerTribe[tid]
+					if tribeCount != nil {
+						tribeCount.count++
+					} else {
+						tribeCount = &TribeCount{
+							tribeID: tid,
+							count:   1,
+						}
+						countsPerTribe[tid] = tribeCount
+					}
+				}
 			}
 		}
 	}
 
-	// generate CRC32  for markers for rough "have they changed" check
+	// generate CRC32 for markers for rough "have they changed" check
 	sort.Slice(crcs, func(i, j int) bool { return crcs[i] < crcs[j] })
 	hash := crc32.NewIEEE()
 	for _, crc := range crcs {
 		binary.Write(hash, binary.LittleEndian, crc)
 	}
 
-	return markers, hash.Sum32()
+	return markers, hash.Sum32(), countsPerTribe
 }
 
 func updateUrlsInRedis(client *redis.Client) {
@@ -693,7 +680,7 @@ func tileBackgroundWorker(client *redis.Client) {
 
 	for {
 		log.Println("Getting markers for tiles")
-		markers, crc := fetchClaimMarkers(client)
+		markers, crc, _ := fetchClaimMarkers(client, false)
 		if crc != previousCrc {
 			previousCrc = crc
 
@@ -713,18 +700,74 @@ func tileBackgroundWorker(client *redis.Client) {
 	}
 }
 
+func stringSliceEq(a, b []string) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func gameBackgroundWorker(client *redis.Client, notifyClient *redis.Client) {
 	gamePath := path.Join(config.WWWDir, "gameTiles")
 	previousCrc := uint32(1)
+	var previousTopTribes []string
 
 	updateUrlsInRedis(client)
 	notifyUrlsChanged(notifyClient)
 
 	for {
 		log.Println("Getting markers for game image")
-		markers, crc := fetchClaimMarkers(client)
+		markers, crc, counts := fetchClaimMarkers(client, config.EnableTopTribes)
 		if crc != previousCrc {
 			previousCrc = crc
+
+			if config.EnableTopTribes {
+				log.Println("Generating top N tribes")
+				top := TopNTribes(10, counts)
+
+				var gameTribeOutput []string
+				for i := range top {
+					tribeID := strconv.FormatUint(top[i], 10)
+					tribe, err := client.HMGet("tribedata:"+tribeID, "TribeName").Result()
+					if err != nil {
+						log.Println(err)
+					}
+					tribeName, ok := tribe[0].(string)
+					if !ok {
+						tribeName = "<abandoned>"
+					}
+					game := GameTribeOutput{
+						TribeID:   top[i],
+						TribeName: tribeName,
+						Index:     i,
+					}
+					js, _ := json.Marshal(game)
+					gameTribeOutput = append(gameTribeOutput, string(js))
+				}
+
+				if !stringSliceEq(previousTopTribes, gameTribeOutput) {
+					_, err := client.Del("toptribes").Result()
+					if err != nil {
+						log.Println(err)
+					}
+					if len(gameTribeOutput) > 0 {
+						_, err = client.RPush("toptribes", gameTribeOutput).Result()
+						if err != nil {
+							log.Println(err)
+						}
+					}
+					client.Publish("GeneralNotifications:GlobalCommands", "ReloadTopTribes")
+					previousTopTribes = gameTribeOutput
+				}
+			}
 
 			log.Println("Generating game images")
 			generateGame(gamePath, markers)
@@ -796,7 +839,7 @@ func main() {
 
 	http.Handle("/", &fileHandlerWithCacheControl{fileServer: http.FileServer(http.Dir(config.WWWDir))})
 
-	endpoint := fmt.Sprintf(":%d" /*config.Host,*/, config.Port)
+	endpoint := fmt.Sprintf(":%d", config.Host, config.Port)
 	log.Println("Listening on ", endpoint)
 	log.Fatal(http.ListenAndServe(endpoint, nil))
 }
